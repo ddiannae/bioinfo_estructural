@@ -1,5 +1,5 @@
 library(data.table)
-
+library(ggplot2)
 
 NNparams <- list(c("H" = -7.9, "S" = -22.2),
                  c("H" = -7.2, "S" = -20.4),
@@ -19,56 +19,8 @@ NNparams <- list(c("H" = -7.9, "S" = -22.2),
 names(NNparams) = c('AA/TT','AT/TA','TA/AT','CA/GT','GT/CA','CT/GA','GA/CT','CG/GC','GC/CG','GG/CC','G','A','sym')
 complement <- list("T", "A", "C", "G")
 names(complement) <- c("A", "T", "G", "C")
-Dc <- 3.3
-E1c <- -17.55
-winsize <- 15
-
-DNA <- "TCGCGCCCTGCCAGCATTTCAACAGGAGGATGCCAGACTAAAGCATAATCAGCAGAGTCATTATCTCCGCTTTTCCATGCTCTGACTCTTGCCTGAGGAATAGCTTTGCGCAGTGCCTCAATCCACCATTGGGTATCGAACGTTGGGTGATAAAAGATGATATCCATACTGACTCCCGAAAAGCGTTGTGCGAAATTTATTCGCACTTATCGTTATGATCTACAAAGGCCACCAGCATAACAAATCCGTGGTCGGTGGCAAAAAAAGCAGATTTCGCTTATTAAAACCACACATTGATTGAAGTTTGAATAAACGCGCGATTTTTTCAAAAAGTTTGTTGACCTCAGGTCATGATTTCCCTAAATTAGCGCCCGTTCCAGCAAGACAGGAACGACAATTTGGTGAGGTGTCCGAGTGGCTGAAGGAGCACGCCTGGAAAGTGTGTATACGG"
-nDNA <- nchar(DNA)
-
-getDNAWindow <- function(text, r) {
-  substr(text, r, r+ (winsize-1))
-}
-
-prom.params <- lapply(1:(nDNA-(199+(winsize-1))), function (k) {
-  DNAseqs50 <- sapply(k:(k+49), getDNAWindow, text = DNA)
-  deltaG1s <- sapply(DNAseqs50, duplex_deltaG, t = 37)
-  E1 <- mean(deltaG1s)
-  
-  DNAseqs100 <- sapply((k+100):(k+199), getDNAWindow, text = DNA)
-  deltaG2s <- sapply(DNAseqs100, duplex_deltaG, t = 37)
-  E2 <- mean(deltaG2s)
-  list(bp = k, D = E1 - E2, E1 = E1)
-})
-
-prom.params <- rbindlist(prom.params)
-positive.signals <- prom.params[D > Dc, ]
-
-
-DNAlist <- strsplit(toupper(DNA), "")[[1]]
-nDNA <- length(DNA)
-
-for(k in 1: (nDNA-213)) {
-
-  print(paste("i: ", k, k+49))
-  sumGE1 <- 0
-  for(i in k:(k+49)) {
-    print(i)
-    sumGE1 <- sumGE1 + duplex_deltaG(paste(DNAlist[i:(i+14)], collapse =""), 37)
-  }
-  promG <- sumGE1 / 50
-  
-  sumGE2 <- 0
-  print(paste("j: ", (k+99), (k+199)))
-  for(j in (k + 99):(k+199)) {
-    sumGE2 <- sumGE2 + duplex_deltaG(DNA[j:(j+14)], 37)
-  }
-  promG2 <- sumGE2 /100
-
-  D <- promG - promG2
-}
-
-
+w <- 15
+t <- 37
 duplex_deltaG <- function (DNAseq, t) {
   total_dG = 0
   tK = 273.15 + t
@@ -118,7 +70,43 @@ duplex_deltaG <- function (DNAseq, t) {
   return(total_dG)  
 }
 
+getDNAWindow <- function(text, r) {
+  substr(text, r, r+ (winsize-1))
+}
 
-duplex_deltaG("CGTTGA", 37)
 
+# DNA.df : Data frame with columns: name, sequence
+calculateNNdG <- function(DNA.df, winsize, temp) {
   
+  all.seq.params <- parallel::mclapply(X = 1:nrow(DNA.df), mc.cores = 3, FUN = function(i) {
+    DNAseq <- DNA.df[i, "sequence"]
+    name <- DNA.df[i, "name"]
+    nDNA <- nchar(DNAseq)
+    print(paste(name, DNAseq))
+    prom.params <- lapply(1:(nDNA-(199+(winsize-1))), function (k) {
+      DNAseqs50 <- sapply(k:(k+49), getDNAWindow, text = DNAseq)
+      deltaG1s <- sapply(DNAseqs50, duplex_deltaG, t = temp)
+      E1 <- mean(deltaG1s)
+      
+      DNAseqs100 <- sapply((k+100):(k+199), getDNAWindow, text = DNAseq)
+      deltaG2s <- sapply(DNAseqs100, duplex_deltaG, t = temp)
+      E2 <- mean(deltaG2s)
+      return(list(bp =-400+(k-1), D = E1 - E2, E1 = E1))
+    })
+    prom.params <- as.data.frame(rbindlist(prom.params))
+    prom.params["name"] <- name
+    return(prom.params)
+  })
+  all.seq.params <- as.data.frame(rbindlist(all.seq.params))
+}
+
+promotores <- fread("K12_400_50_sites", sep = "\\", col.names = c("name", "sequence"), 
+                    colClasses = c("char", "char", "NULL"))
+
+nndgs <- calculateNNdG(promotores, w, t)
+fwrite(nndgs, file = "NNdG_results.tsv", sep = "\t", col.names = T, row.names = F)
+
+#ggplot(prom.params, aes(x = bp, y = D)) + geom_line() + geom_point()
+#  scale_y_continuous(breaks=seq(-2,2,0.5))
+
+
