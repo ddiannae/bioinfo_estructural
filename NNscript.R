@@ -1,3 +1,6 @@
+library(data.table)
+
+
 NNparams <- list(c("H" = -7.9, "S" = -22.2),
                  c("H" = -7.2, "S" = -20.4),
                  c("H" = -7.2, "S" = -21.3),
@@ -16,27 +19,56 @@ NNparams <- list(c("H" = -7.9, "S" = -22.2),
 names(NNparams) = c('AA/TT','AT/TA','TA/AT','CA/GT','GT/CA','CT/GA','GA/CT','CG/GC','GC/CG','GG/CC','G','A','sym')
 complement <- list("T", "A", "C", "G")
 names(complement) <- c("A", "T", "G", "C")
-
+Dc <- 3.3
+E1c <- -17.55
+winsize <- 15
 
 DNA <- "TCGCGCCCTGCCAGCATTTCAACAGGAGGATGCCAGACTAAAGCATAATCAGCAGAGTCATTATCTCCGCTTTTCCATGCTCTGACTCTTGCCTGAGGAATAGCTTTGCGCAGTGCCTCAATCCACCATTGGGTATCGAACGTTGGGTGATAAAAGATGATATCCATACTGACTCCCGAAAAGCGTTGTGCGAAATTTATTCGCACTTATCGTTATGATCTACAAAGGCCACCAGCATAACAAATCCGTGGTCGGTGGCAAAAAAAGCAGATTTCGCTTATTAAAACCACACATTGATTGAAGTTTGAATAAACGCGCGATTTTTTCAAAAAGTTTGTTGACCTCAGGTCATGATTTCCCTAAATTAGCGCCCGTTCCAGCAAGACAGGAACGACAATTTGGTGAGGTGTCCGAGTGGCTGAAGGAGCACGCCTGGAAAGTGTGTATACGG"
-DNA <- strsplit(toupper(DNA), "")[[1]]
+nDNA <- nchar(DNA)
 
-
-i <- 1
-sumG <- 0
-for(i in 1:36) {
-  sumG <- sumG + duplex_deltaG(DNA[i:(i+14)], 37)
+getDNAWindow <- function(text, r) {
+  substr(text, r, r+ (winsize-1))
 }
-promG <- sumG / 50
 
-j <- 99
-sumGE2 <- 0
-for(j in 100:186) {
-  sumGE2 <- sumGE2 + duplex_deltaG(DNA[j:(j+14)], 37)
-}
-promG2 <- sumGE2 /100
+prom.params <- lapply(1:(nDNA-(199+(winsize-1))), function (k) {
+  DNAseqs50 <- sapply(k:(k+49), getDNAWindow, text = DNA)
+  deltaG1s <- sapply(DNAseqs50, duplex_deltaG, t = 37)
+  E1 <- mean(deltaG1s)
   
-D <- promG - promG2
+  DNAseqs100 <- sapply((k+100):(k+199), getDNAWindow, text = DNA)
+  deltaG2s <- sapply(DNAseqs100, duplex_deltaG, t = 37)
+  E2 <- mean(deltaG2s)
+  list(bp = k, D = E1 - E2, E1 = E1)
+})
+
+prom.params <- rbindlist(prom.params)
+positive.signals <- prom.params[D > Dc, ]
+
+
+DNAlist <- strsplit(toupper(DNA), "")[[1]]
+nDNA <- length(DNA)
+
+for(k in 1: (nDNA-213)) {
+
+  print(paste("i: ", k, k+49))
+  sumGE1 <- 0
+  for(i in k:(k+49)) {
+    print(i)
+    sumGE1 <- sumGE1 + duplex_deltaG(paste(DNAlist[i:(i+14)], collapse =""), 37)
+  }
+  promG <- sumGE1 / 50
+  
+  sumGE2 <- 0
+  print(paste("j: ", (k+99), (k+199)))
+  for(j in (k + 99):(k+199)) {
+    sumGE2 <- sumGE2 + duplex_deltaG(DNA[j:(j+14)], 37)
+  }
+  promG2 <- sumGE2 /100
+
+  D <- promG - promG2
+}
+
+
 duplex_deltaG <- function (DNAseq, t) {
   total_dG = 0
   tK = 273.15 + t
