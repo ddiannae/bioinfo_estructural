@@ -1,0 +1,13 @@
+Check Hits for overlap and repeat domains:
+6 4QKO_C  3 86  1 86  
+8 5WNW_C  6 45  1 40  
+
+
+
+
+Selected templates 8, 6.
+8: 5WNW_C Spheroplast protein Y, Colicin-E7 immunity; Chaperone; HET: IMD, ZN; 1.79
+6: 4QKO_C Pyocin-S2 immunity protein; HNH Nuclease Domain, Colicin Nuclease; HET: B
+! 5WNW C: template pos 10 (T) does not match cif pos 6 (DNE). Replacing with gap.
+! 5WNW C: template pos 14 (F) does not match cif pos 10 (DNE). Replacing with gap.
+! 5WNW C: template pos 47 (I) does not match cif pos 39 (DNE). Replacing with gap.
